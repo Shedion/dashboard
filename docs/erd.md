@@ -1,11 +1,14 @@
 # Datamodel (ERD) – Persoonlijk Dashboard
 
-Versie 2 (8 nov 2026). Wordt bijgewerkt bij elke nieuwe migratie, in dezelfde commit.
+Versie 3 (15 nov 2026). Wordt bijgewerkt bij elke nieuwe migratie, in dezelfde commit.
+
+Versie 3: reminders zijn nu een eigen onderdeel en hangen niet meer aan taken. Ze hebben eigen categorieën (`reminder_categories`).
 
 ```mermaid
 erDiagram
     users ||--o{ tasks : heeft
     users ||--o{ reminders : heeft
+    users ||--o{ reminder_categories : heeft
     users ||--o{ events : heeft
     users ||--o{ categories : heeft
     users ||--o{ category_rules : heeft
@@ -16,7 +19,7 @@ erDiagram
     users ||--o{ savings_goals : heeft
     users ||--o{ learning_goals : heeft
     users ||--o{ projects : heeft
-    tasks ||--o{ reminders : "kan hebben"
+    reminder_categories |o--o{ reminders : groepeert
     categories ||--o{ transactions : groepeert
     categories ||--o{ recurring_transactions : groepeert
     categories ||--o{ budgets : "budget per"
@@ -47,10 +50,21 @@ erDiagram
     reminders {
         bigint id PK
         bigint user_id FK
-        bigint task_id FK "nullable, cascadeOnDelete"
-        string message
-        datetime remind_at
-        datetime sent_at "nullable"
+        bigint reminder_category_id FK "nullable, nullOnDelete"
+        string title
+        text description "nullable"
+        datetime deadline "nullable, alleen datum = 23:59"
+        boolean deadline_has_time "default false"
+        int remind_before "nullable, minuten"
+        datetime remind_at "nullable, deadline - remind_before"
+        datetime sent_at "nullable, pop-up getoond"
+        datetime completed_at "nullable, afgevinkt"
+    }
+    reminder_categories {
+        bigint id PK
+        bigint user_id FK
+        string name "unique per user"
+        string color "nullable, hex, unique per user"
     }
     events {
         bigint id PK
@@ -139,8 +153,8 @@ erDiagram
 
 - **Elke tabel heeft `user_id`** met `cascadeOnDelete`. Queries altijd via `$request->user()->...` of een Policy.
 - **Bedragen versleuteld** (`encrypted` cast) in transactions, recurring_transactions, balances, budgets en savings_goals. Gevolg: MySQL kan niet `SUM`men, dus totalen worden in PHP berekend. Voor één gebruiker is dat prima.
-- **Indexen** op wat vaak gefilterd wordt: `tasks (user_id, status)`, `tasks (user_id, due_at)`, `reminders (remind_at, sent_at)`, `transactions (user_id, date)`.
-- **Eigendom controleren:** een `category_id` of `task_id` uit een request moet van dezelfde user zijn (validatie met `Rule::exists(...)->where('user_id', ...)`).
+- **Indexen** op wat vaak gefilterd wordt: `tasks (user_id, status)`, `tasks (user_id, due_at)`, `reminders (user_id, completed_at, deadline)`, `reminders (user_id, remind_at, sent_at)`, `transactions (user_id, date)`.
+- **Eigendom controleren:** een `category_id` of `reminder_category_id` uit een request moet van dezelfde user zijn (validatie met `Rule::exists(...)->where('user_id', ...)`).
 - **Enums** als PHP-enums (`app/Enums`) met een cast op het model.
 
 ## Niet in dit ERD (standaard van Laravel/Sanctum)
